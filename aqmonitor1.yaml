@@ -276,7 +276,7 @@ display:
       ;
       ;
       // SELECT BEST AVAILABLE TEMPERATURE SENSOR
-      float temps[5] = {id(temp_sht40).state, id(temp_aht20).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
+      float temps[5] = {id(temp_sht40).state, id(temp_aht20_c).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
       float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
       float temp = 0;
       float hum = 0;
@@ -288,8 +288,9 @@ display:
       }
       ;
       // DRAW HUMITEMP
+      float temp_f = temp * 1.8 + 32;
       it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-      it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp);
+      it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
       it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
       it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "\%");
       it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
@@ -530,14 +531,20 @@ sensor:
     variant: AHT20
     temperature:
       name: "AHT20 Temperature"
-      id: temp_aht20
-      filters:
-        # Convert °C to °F
-        - lambda: |-
-            return x * 1.8 + 32;
+      id: temp_aht20_c
     humidity:
       name: "AHT20 Humidity"
       id: hum_aht20
+    update_interval: 10s
+
+  - platform: template
+    name: "AHT20 Temperature F"
+    id: temp_aht20_f
+    unit_of_measurement: "°F"
+    device_class: temperature
+    state_class: measurement
+    internal: true
+    lambda: return id(temp_aht20_c).state * 1.8 + 32;
     update_interval: 10s
 
   - platform: bmp280_i2c
@@ -634,9 +641,9 @@ sensor:
             alpha: 0.2
     store_baseline: yes
     update_interval: 5s
-    compensation: 
+    compensation:
       humidity_source: hum_aht20
-      temperature_source: temp_aht20
+      temperature_source: temp_aht20_c
 
   - platform: sgp4x
     i2c_id: i2c_main
@@ -655,9 +662,9 @@ sensor:
       device_class: aqi
       state_class: measurement
       unit_of_measurement: "index points"
-    compensation: 
+    compensation:
       humidity_source: hum_aht20
-      temperature_source: temp_aht20
+      temperature_source: temp_aht20_c
     store_baseline: True
     update_interval: 10s
 
