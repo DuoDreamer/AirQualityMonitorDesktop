@@ -215,7 +215,7 @@ display:
       auto draw_row = [&](int cy, const char *title, const char *unit,
                           const char *names[3], const float values[3],
                           const Color colors[3], bool show_unit = true) {
-        it.fill_rect(0, cy, w, 88, Color::BLACK);
+        it.filled_rectangle(0, cy, w, 88, Color::BLACK);
         it.line(0, cy, w, cy, id(white));
         it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
         if (show_unit) {
@@ -309,13 +309,13 @@ display:
       // DRAW HUMITEMP ONLY IF CHANGED
       float temp_f = temp * 1.8 + 32;
       if (temp_f != prev_temp_f) {
-        it.fill_rect(60, 0, 80, 40, Color::BLACK);
+        it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
         it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
         it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
         prev_temp_f = temp_f;
       }
       if (hum != prev_hum) {
-        it.fill_rect(150, 0, 90, 40, Color::BLACK);
+        it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
         it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
         it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
         it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
@@ -390,7 +390,7 @@ display:
         int start_y = cy + 2;
         bool changed = (aqi_voc != prev_aqi_voc) || (aqi_nox != prev_aqi_nox);
         if (changed) {
-          it.fill_rect(0, start_y, w, 40, Color::BLACK);
+          it.filled_rectangle(0, start_y, w, 40, Color::BLACK);
           auto sgp4x = "SGP41";
           if (isnan(aqi_nox)) { sgp4x = "SGP40"; }
           if(!isnan(aqi_voc)){
