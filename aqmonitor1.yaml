@@ -478,6 +478,7 @@ uart:
   - tx_pin: GPIO08
     rx_pin: GPIO07
     baud_rate: 9600
+    rx_buffer_size: 256
     id: uart_pms
 
 spi:
@@ -669,9 +670,17 @@ sensor:
     update_interval: 10s
 
   - platform: pmsx003
-    type: PMSX003 
-    update_interval: 30s
+    type: PMSX003
+    update_interval: 1s
     uart_id: uart_pms
+    on_poll:
+      then:
+        - uart.flush: uart_pms
+        - lambda: |-
+            uint8_t first;
+            if (id(uart_pms).peek_byte(&first) && first != 0x42) {
+              id(uart_pms).flush();
+            }
     pm_1_0:
       name: "PMS Particulate Matter <1.0µm Concentration"
       id: pm1_pms
