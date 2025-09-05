@@ -298,8 +298,8 @@ display:
       // SELECT BEST AVAILABLE TEMPERATURE SENSOR
       float temps[5] = {id(temp_sht40).state, id(temp_aht20_c).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
       float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
-      float temp = 0;
-      float hum = 0;
+      float temp = NAN;
+      float hum = NAN;
       for(int i = 0; i < 5; i++){
         if(!isnan(temps[i])){temp = temps[i]; break;}
       }
@@ -307,19 +307,23 @@ display:
         if(!isnan(hums[i])){hum = hums[i]; break;}
       }
       // DRAW HUMITEMP ONLY IF CHANGED
-      float temp_f = temp * 1.8 + 32;
-      if (temp_f != prev_temp_f) {
-        it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
-        it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-        it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
-        prev_temp_f = temp_f;
+      if (!isnan(temp)) {
+        float temp_f = temp * 1.8 + 32;
+        if (temp_f != prev_temp_f) {
+          it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
+          it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
+          it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
+          prev_temp_f = temp_f;
+        }
       }
-      if (hum != prev_hum) {
-        it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
-        it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
-        it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
-        it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
-        prev_hum = hum;
+      if (!isnan(hum)) {
+        if (hum != prev_hum) {
+          it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
+          it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
+          it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
+          it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
+          prev_hum = hum;
+        }
       }
 
       // PREPARE VARIABLES
@@ -344,8 +348,8 @@ display:
           draw_row(cy, "Particles", "µg/m³", names, values, colors);
           for (int i = 0; i < 3; i++) prev_particles[i] = values[i];
         }
-        cy += 88;
       }
+      cy += 88;
       // PREPARE CO2
       if (!isnan(co2) || !isnan(e_co2) || !isnan(s_co2)){
         names[0] = "SCD40";
