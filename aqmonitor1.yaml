@@ -180,44 +180,21 @@ display:
     color_order: bgr # CHANGE THIS if your screen has colors mapped wrong
     color_palette: 8BIT
     invert_colors: false
-    update_interval: 5s
     lambda: |-
-      static bool initial = true;
-      static float prev_particles[3] = {NAN, NAN, NAN};
-      static bool prev_particle_stale[3] = {false, false, false};
-      static uint32_t last_particle_update[3] = {0, 0, 0};
-      static float prev_co2_vals[3] = {NAN, NAN, NAN};
-      static bool prev_co2_stale[3] = {false, false, false};
-      static uint32_t last_co2_update[3] = {0, 0, 0};
-      static float prev_voc_vals[3] = {NAN, NAN, NAN};
-      static bool prev_voc_stale[3] = {false, false, false};
-      static uint32_t last_voc_update[3] = {0, 0, 0};
-      static float prev_aqi_voc = NAN;
-      static bool prev_aqi_voc_stale = false;
-      static uint32_t last_aqi_voc_update = 0;
-      static float prev_aqi_nox = NAN;
-      static bool prev_aqi_nox_stale = false;
-      static uint32_t last_aqi_nox_update = 0;
-      static float prev_temp_f = NAN;
-      static bool prev_temp_stale = false;
-      static float prev_hum = NAN;
-      static bool prev_hum_stale = false;
-      static uint32_t last_temp_update = 0;
-      static uint32_t last_hum_update = 0;
-      static const uint32_t STALE_THRESHOLD_MS = 300000; // 5 minutes
-      
-      if (initial) {
-        it.fill(Color::BLACK);
-        initial = false;
-      }
-      
-      uint32_t now = millis();
+      it.fill(Color::BLACK);
+      // Please forgive me. I know this is horrible spaghetti code, but for now it gets the job done. Will eventually move all this to LVGL. 
+      ;
       auto cy = 0; // current Y position
+      auto ix = 0; // current X grid position
       auto fv30 = id(font_value_30);
       auto fh36 = id(font_heading_36);
       auto fl14 = id(font_label_14);
+      ;
       auto w = it.get_width();
+      auto h = it.get_height();
+      ;
       auto col = id(white);
+      ;
       auto co2 = id(co2_scd40).state;
       auto e_co2 = id(eco2_ens160).state;
       auto s_co2 = id(eco2_sgp30).state;
@@ -229,40 +206,11 @@ display:
       auto pm10 = id(pm10_pms).state;
       auto aqi_voc = id(aqi_voc_sgp41).state;
       auto aqi_nox = id(aqi_nox_sgp41).state;
-      // helper to draw a row of three values with partial updates
-      auto draw_row = [&](int cy, const char *title, const char *unit,
-                          const char *names[3], const float values[3],
-                          const Color colors[3], float *prev_vals,
-                          bool *prev_stale, uint32_t *last_updates,
-                          bool show_unit = true) {
-        it.line(0, cy, w, cy, id(white));
-        it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
-        if (show_unit) {
-          it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
-        }
-        for (int i = 0; i < 3; i++) {
-          int cx = w/6*(1+i*2);
-          bool valid = !isnan(values[i]);
-          bool changed = valid ? values[i] != prev_vals[i] : !isnan(prev_vals[i]);
-          if (changed && valid) last_updates[i] = now;
-          bool stale = (now - last_updates[i]) > STALE_THRESHOLD_MS;
-          if (changed || (stale != prev_stale[i])) {
-            it.filled_rectangle(cx - 40, cy + 24, 80, 64, Color::BLACK);
-            if (valid) {
-              it.printf(cx, cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
-              if (stale) {
-                it.printf(cx, cy + 50, fv30, id(red), display::TextAlign::TOP_CENTER, "---");
-              } else {
-                it.printf(cx, cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
-              }
-            }
-            prev_vals[i] = valid ? values[i] : NAN;
-            prev_stale[i] = stale;
-          }
-        }
-      };
-
+      ;
+      ;
+      ;
       // SET COLOR FOR EACH READING
+      ;
       col = id(green);
       if (co2 > 700){col = id(yellow);}
       if (co2 > 1000){col = id(orange);}
@@ -327,142 +275,166 @@ display:
       auto pm10_c = col;
       ;
       ;
+      // SELECT BEST AVAILABLE TEMPERATURE SENSOR
+      float temps[5] = {id(temp_sht40).state, id(temp_aht20).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
+      float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
+      float temp = 0;
+      float hum = 0;
+      for(int i = 0; i < 5; i++){
+      if(!isnan(temps[i])){temp = temps[i]; break;}
+      }
+      for(int i = 0; i < 4; i++){
+      if(!isnan(hums[i])){hum = hums[i]; break;}
+      }
+      ;
+      // DRAW HUMITEMP
+      it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
+      it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp);
+      it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
+      it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "\%");
+      it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
+      ;
+      ;
       // PREPARE VARIABLES
+      auto title = "";
+      auto unit = "";
       const char *names[3];
       float values[3];
-      Color colors[3];
+      esphome::Color colors[3];
+      int count = 0;
+      ;
+      ;
       // PREPARE PARTICLES
-      cy = 40;
+      cy = 30;
+      ;
+      if (!isnan(pm1)){
+      count = 0;
+      title = "Particles";
+      unit = "µg/m³";
       names[0] = "PM1";
       names[1] = "PM2.5";
-      names[2] = "PM10";
+      names[2] = "PM10"; //god C++ sucks
       values[0] = pm1;
       values[1] = pm25;
       values[2] = pm10;
       colors[0] = pm1_c;
       colors[1] = pm25_c;
       colors[2] = pm10_c;
-      draw_row(cy, "Particles", "µg/m³", names, values, colors,
-               prev_particles, prev_particle_stale, last_particle_update);
+      ;
+      ;
+      // START REUSABLE
+      it.line(0,cy,w,cy,id(white));
+      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
+      it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
+      ix = 0;
+      for (int i = 0; i < 3; i++){
+      if(isnan(values[i])){continue;}
+      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
+      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
+      ix++;
+      }
+      // END REUSABLE
+      ;
       cy += 88;
+      }
+      ;
+      // END PARTICLES
+      ;
       // PREPARE CO2
-      if (!isnan(co2) || !isnan(e_co2) || !isnan(s_co2)){
-        names[0] = "SCD40";
-        names[1] = "ENS160 est.";
-        names[2] = "SGP30 est.";
-        values[0] = co2;
-        values[1] = e_co2;
-        values[2] = s_co2;
-        colors[0] = co2_c;
-        colors[1] = e_co2_c;
-        colors[2] = s_co2_c;
-        draw_row(cy, "CO2", "ppm", names, values, colors,
-                 prev_co2_vals, prev_co2_stale, last_co2_update);
-        cy += 88;
+      ;
+      if (!isnan(co2) or !isnan(e_co2) or !isnan(s_co2)){
+      count = 0;
+      title = "CO2";
+      unit = "ppm";
+      names[0] = "SCD40";
+      names[1] = "ENS160 est.";
+      names[2] = "SGP30 est.";
+      values[0] = co2;
+      values[1] = e_co2;
+      values[2] = s_co2;
+      colors[0] = co2_c;
+      colors[1] = e_co2_c;
+      colors[2] = s_co2_c;
+      ;
+      ;
+      // START REUSABLE
+      it.line(0,cy,w,cy,id(white));
+      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
+      it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
+      ix = 0;
+      for (int i = 0; i < 3; i++){
+      if(isnan(values[i])){continue;}
+      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
+      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
+      ix++;
       }
+      // END REUSABLE
+      ;
+      ;
+      cy += 88;
+      }
+      ;
+      // END CO2
+      ;
       // PREPARE VOC
-      bool draw_general_voc = (!isnan(ch2o) || !isnan(e_voc) || !isnan(s_voc));
-      bool draw_sgp4x = (!isnan(aqi_voc) || !isnan(aqi_nox));
-      if (draw_general_voc) {
-        names[0] = "SGP30";
-        names[1] = "ENS160";
-        names[2] = "ZE08-CH2O";
-        values[0] = s_voc;
-        values[1] = e_voc;
-        values[2] = ch2o;
-        colors[0] = s_voc_c;
-        colors[1] = e_voc_c;
-        colors[2] = ch2o_c;
-        draw_row(cy, "VOC", "ppb", names, values, colors,
-                 prev_voc_vals, prev_voc_stale, last_voc_update);
-        cy += 88;
+      ;
+      bool draw_general_voc = (!isnan(ch2o) or !isnan(e_voc) or !isnan(s_voc));
+      bool draw_sgp4x = (!isnan(aqi_voc) or !isnan(aqi_nox));
+      if (draw_general_voc or draw_sgp4x){
+      count = 0;
+      title = "VOC";
+      unit = "ppb";
+      names[0] = "SGP30";
+      names[1] = "ENS160";
+      names[2] = "ZE08-CH2O";
+      values[0] = s_voc;
+      values[1] = e_voc;
+      values[2] = ch2o;
+      colors[0] = s_voc_c;
+      colors[1] = e_voc_c;
+      colors[2] = ch2o_c;
+      ;
+      ;
+      // START REUSABLE | UNIT CONDITION ADDED
+      it.line(0,cy,w,cy,id(white));
+      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
+      if (draw_general_voc){it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);}
+      ix = 0;
+      for (int i = 0; i < 3; i++){
+      if(isnan(values[i])){continue;}
+      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
+      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
+      ix++;
       }
-      if (draw_sgp4x) {
-        auto sgp4x = isnan(aqi_nox) ? "SGP40" : "SGP41";
-        int start_y = cy + 2;
-        // VOC index line
-        bool changed = !isnan(aqi_voc) ? (aqi_voc != prev_aqi_voc) : !isnan(prev_aqi_voc);
-        if (changed && !isnan(aqi_voc)) last_aqi_voc_update = now;
-        bool stale = (now - last_aqi_voc_update) > STALE_THRESHOLD_MS;
-        if (changed || (stale != prev_aqi_voc_stale)) {
-          it.filled_rectangle(0, start_y, w, 15, Color::BLACK);
-          if (!isnan(aqi_voc)) {
-            it.printf(2, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "%s VOC Index", sgp4x);
-            it.printf(180, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-            if (stale) {
-              it.printf(180, start_y, fl14, id(red), TextAlign::CENTER_RIGHT, "---");
-            } else {
-              it.printf(180, start_y, fl14, id(white), TextAlign::CENTER_RIGHT, "%.0f ", aqi_voc);
-            }
-          }
-          prev_aqi_voc = aqi_voc;
-          prev_aqi_voc_stale = stale;
-        }
-        start_y += 15;
-        changed = !isnan(aqi_nox) ? (aqi_nox != prev_aqi_nox) : !isnan(prev_aqi_nox);
-        if (changed && !isnan(aqi_nox)) last_aqi_nox_update = now;
-        stale = (now - last_aqi_nox_update) > STALE_THRESHOLD_MS;
-        if (changed || (stale != prev_aqi_nox_stale)) {
-          it.filled_rectangle(0, start_y, w, 15, Color::BLACK);
-          if (!isnan(aqi_nox)) {
-            it.printf(2, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "%s NOx Index", sgp4x);
-            it.printf(180, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-            if (stale) {
-              it.printf(180, start_y, fl14, id(red), TextAlign::CENTER_RIGHT, "---");
-            } else {
-              it.printf(180, start_y, fl14, id(white), TextAlign::CENTER_RIGHT, "%.0f ", aqi_nox);
-            }
-          }
-          prev_aqi_nox = aqi_nox;
-          prev_aqi_nox_stale = stale;
-        }
+      // END REUSABLE
+      ;
+      ;
+      if (draw_general_voc){cy += 88;}
+      else {cy += 46;}
       }
-      // SELECT BEST AVAILABLE TEMPERATURE SENSOR
-      float temps[5] = {id(temp_sht40).state, id(temp_aht20_c).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
-      float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
-      float temp = NAN;
-      float hum = NAN;
-      for(int i = 0; i < 5; i++){
-        if(!isnan(temps[i])){temp = temps[i]; break;}
+      // START SGP4x
+      cy+=2;
+      auto sgp4x = "SGP41";
+      if (isnan(aqi_nox)){sgp4x = "SGP40";}
+      if(!isnan(aqi_voc)){
+      col = id(white);
+      it.printf(2, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "%s VOC Index", sgp4x);
+      it.printf(180, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
+      it.printf(180, cy, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_voc);
+      cy+=15;
       }
-      for(int i = 0; i < 4; i++){
-        if(!isnan(hums[i])){hum = hums[i]; break;}
+      ;
+      if(!isnan(aqi_nox)){
+      col = id(white);
+      it.printf(2, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "%s NOx Index", sgp4x);
+      it.printf(180, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
+      it.printf(180, cy, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_nox);
       }
-      // DRAW HUMITEMP WITH STALE INDICATOR
-      if (!isnan(temp)) {
-        float temp_f = temp * 1.8 + 32;
-        bool changed = temp_f != prev_temp_f;
-        if (changed) last_temp_update = now;
-        bool stale = (now - last_temp_update) > STALE_THRESHOLD_MS;
-        if (changed || (stale != prev_temp_stale)) {
-          it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
-          it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-          if (stale) {
-            it.printf(90, 34, fv30, id(red), display::TextAlign::BOTTOM_RIGHT, "---");
-          } else {
-            it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
-          }
-          prev_temp_f = temp_f;
-          prev_temp_stale = stale;
-        }
-      }
-      if (!isnan(hum)) {
-        bool changed = hum != prev_hum;
-        if (changed) last_hum_update = now;
-        bool stale = (now - last_hum_update) > STALE_THRESHOLD_MS;
-        if (changed || (stale != prev_hum_stale)) {
-          it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
-          it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
-          it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
-          if (stale) {
-            it.printf(197, 34, fv30, id(red), display::TextAlign::BOTTOM_RIGHT, "---");
-          } else {
-            it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
-          }
-          prev_hum = hum;
-          prev_hum_stale = stale;
-        }
-      }
+      ;
+      // END VOC & SGP4x
+      ;
+      ;
+      ;
     dimensions:
       height: 320
       width: 240
@@ -505,7 +477,6 @@ uart:
   - tx_pin: GPIO08
     rx_pin: GPIO07
     baud_rate: 9600
-    rx_buffer_size: 256
     id: uart_pms
 
 spi:
@@ -559,20 +530,14 @@ sensor:
     variant: AHT20
     temperature:
       name: "AHT20 Temperature"
-      id: temp_aht20_c
+      id: temp_aht20
+      filters:
+        # Convert °C to °F
+        - lambda: |-
+            return x * 1.8 + 32;
     humidity:
       name: "AHT20 Humidity"
       id: hum_aht20
-    update_interval: 10s
-
-  - platform: template
-    name: "AHT20 Temperature F"
-    id: temp_aht20_f
-    unit_of_measurement: "°F"
-    device_class: temperature
-    state_class: measurement
-    internal: true
-    lambda: return id(temp_aht20_c).state * 1.8 + 32;
     update_interval: 10s
 
   - platform: bmp280_i2c
@@ -669,9 +634,9 @@ sensor:
             alpha: 0.2
     store_baseline: yes
     update_interval: 5s
-    compensation:
+    compensation: 
       humidity_source: hum_aht20
-      temperature_source: temp_aht20_c
+      temperature_source: temp_aht20
 
   - platform: sgp4x
     i2c_id: i2c_main
@@ -690,16 +655,16 @@ sensor:
       device_class: aqi
       state_class: measurement
       unit_of_measurement: "index points"
-    compensation:
+    compensation: 
       humidity_source: hum_aht20
-      temperature_source: temp_aht20_c
+      temperature_source: temp_aht20
     store_baseline: True
     update_interval: 10s
 
   - platform: pmsx003
-    type: PMSX003
-    uart_id: uart_pms
+    type: PMSX003 
     update_interval: 30s
+    uart_id: uart_pms
     pm_1_0:
       name: "PMS Particulate Matter <1.0µm Concentration"
       id: pm1_pms
