@@ -305,49 +305,12 @@ display:
       auto pm10_c = col;
       ;
       ;
-      // SELECT BEST AVAILABLE TEMPERATURE SENSOR
-      float temps[5] = {id(temp_sht40).state, id(temp_aht20_c).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
-      float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
-      float temp = NAN;
-      float hum = NAN;
-      for(int i = 0; i < 5; i++){
-        if(!isnan(temps[i])){temp = temps[i]; break;}
-      }
-      for(int i = 0; i < 4; i++){
-        if(!isnan(hums[i])){hum = hums[i]; break;}
-      }
-      // SMART TEMP/HUMIDITY UPDATES
-      if (!isnan(temp)) {
-        float temp_f = temp * 1.8 + 32;
-        bool temp_changed = (temp_f != prev_temp_f);
-        bool temp_stale = (now - last_temp_update) > STALE_THRESHOLD_MS;
-        if (temp_changed || temp_stale) {
-          it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
-          it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-          it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
-          prev_temp_f = temp_f;
-          last_temp_update = now;
-        }
-      }
-      if (!isnan(hum)) {
-        bool hum_changed = (hum != prev_hum);
-        bool hum_stale = (now - last_hum_update) > STALE_THRESHOLD_MS;
-        if (hum_changed || hum_stale) {
-          it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
-          it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
-          it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
-          it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
-          prev_hum = hum;
-          last_hum_update = now;
-        }
-      }
-
       // PREPARE VARIABLES
       const char *names[3];
       float values[3];
       Color colors[3];
       // PREPARE PARTICLES
-      cy = 30;
+      cy = 40;
       if (!isnan(pm1)){
         names[0] = "PM1";
         names[1] = "PM2.5";
@@ -360,9 +323,12 @@ display:
         colors[2] = pm10_c;
         // Smart particles update - changed or stale data
         bool changed = false;
-        for (int i = 0; i < 3; i++) if (values[i] != prev_particles[i]) changed = true;
-        bool stale = (now - last_particle_update) > STALE_THRESHOLD_MS;
-        if (changed || stale) {
+        bool has_valid = false;
+        for (int i = 0; i < 3; i++) {
+          if (!isnan(values[i])) has_valid = true;
+          if (values[i] != prev_particles[i]) changed = true;
+        }
+        if (changed && has_valid) {
           draw_row(cy, "Particles", "µg/m³", names, values, colors);
           for (int i = 0; i < 3; i++) prev_particles[i] = values[i];
           last_particle_update = now;
@@ -382,9 +348,12 @@ display:
         colors[2] = s_co2_c;
         // Smart CO2 update - changed or stale data
         bool changed = false;
-        for (int i = 0; i < 3; i++) if (values[i] != prev_co2_vals[i]) changed = true;
-        bool stale = (now - last_co2_update) > STALE_THRESHOLD_MS;
-        if (changed || stale) {
+        bool has_valid = false;
+        for (int i = 0; i < 3; i++) {
+          if (!isnan(values[i])) has_valid = true;
+          if (values[i] != prev_co2_vals[i]) changed = true;
+        }
+        if (changed && has_valid) {
           draw_row(cy, "CO2", "ppm", names, values, colors);
           for (int i = 0; i < 3; i++) prev_co2_vals[i] = values[i];
           last_co2_update = now;
@@ -406,9 +375,12 @@ display:
         colors[2] = ch2o_c;
         // Smart VOC update - changed or stale data
         bool changed = false;
-        for (int i = 0; i < 3; i++) if (values[i] != prev_voc_vals[i]) changed = true;
-        bool stale = (now - last_voc_update) > STALE_THRESHOLD_MS;
-        if (changed || stale) {
+        bool has_valid = false;
+        for (int i = 0; i < 3; i++) {
+          if (!isnan(values[i])) has_valid = true;
+          if (values[i] != prev_voc_vals[i]) changed = true;
+        }
+        if (changed && has_valid) {
           draw_row(cy, "VOC", "ppb", names, values, colors);
           for (int i = 0; i < 3; i++) prev_voc_vals[i] = values[i];
           last_voc_update = now;
@@ -440,6 +412,36 @@ display:
           prev_aqi_voc = aqi_voc;
           prev_aqi_nox = aqi_nox;
           last_sgp4x_update = now;
+        }
+      }
+      // SELECT BEST AVAILABLE TEMPERATURE SENSOR
+      float temps[5] = {id(temp_sht40).state, id(temp_aht20_c).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
+      float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
+      float temp = NAN;
+      float hum = NAN;
+      for(int i = 0; i < 5; i++){
+        if(!isnan(temps[i])){temp = temps[i]; break;}
+      }
+      for(int i = 0; i < 4; i++){
+        if(!isnan(hums[i])){hum = hums[i]; break;}
+      }
+      // DRAW HUMITEMP ONLY IF CHANGED
+      if (!isnan(temp)) {
+        float temp_f = temp * 1.8 + 32;
+        if (temp_f != prev_temp_f) {
+          it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
+          it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
+          it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
+          prev_temp_f = temp_f;
+        }
+      }
+      if (!isnan(hum)) {
+        if (hum != prev_hum) {
+          it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
+          it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
+          it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
+          it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
+          prev_hum = hum;
         }
       }
     dimensions:
