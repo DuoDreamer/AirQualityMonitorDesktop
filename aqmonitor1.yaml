@@ -190,10 +190,20 @@ display:
       static float prev_aqi_nox = NAN;
       static float prev_temp_f = NAN;
       static float prev_hum = NAN;
+      static uint32_t last_particle_update = 0;
+      static uint32_t last_co2_update = 0;
+      static uint32_t last_voc_update = 0;
+      static uint32_t last_sgp4x_update = 0;
+      static uint32_t last_temp_update = 0;
+      static uint32_t last_hum_update = 0;
+      static const uint32_t STALE_THRESHOLD_MS = 45000; // 45 seconds
+      
       if (initial) {
         it.fill(Color::BLACK);
         initial = false;
       }
+      
+      uint32_t now = millis();
       auto cy = 0; // current Y position
       auto fv30 = id(font_value_30);
       auto fh36 = id(font_heading_36);
@@ -311,6 +321,7 @@ display:
         colors[0] = pm1_c;
         colors[1] = pm25_c;
         colors[2] = pm10_c;
+        // Smart particles update - changed or stale data
         bool changed = false;
         bool has_valid = false;
         for (int i = 0; i < 3; i++) {
@@ -320,6 +331,7 @@ display:
         if (changed && has_valid) {
           draw_row(cy, "Particles", "µg/m³", names, values, colors);
           for (int i = 0; i < 3; i++) prev_particles[i] = values[i];
+          last_particle_update = now;
         }
       }
       cy += 88;
@@ -334,6 +346,7 @@ display:
         colors[0] = co2_c;
         colors[1] = e_co2_c;
         colors[2] = s_co2_c;
+        // Smart CO2 update - changed or stale data
         bool changed = false;
         bool has_valid = false;
         for (int i = 0; i < 3; i++) {
@@ -343,6 +356,7 @@ display:
         if (changed && has_valid) {
           draw_row(cy, "CO2", "ppm", names, values, colors);
           for (int i = 0; i < 3; i++) prev_co2_vals[i] = values[i];
+          last_co2_update = now;
         }
         cy += 88;
       }
@@ -359,6 +373,7 @@ display:
         colors[0] = s_voc_c;
         colors[1] = e_voc_c;
         colors[2] = ch2o_c;
+        // Smart VOC update - changed or stale data
         bool changed = false;
         bool has_valid = false;
         for (int i = 0; i < 3; i++) {
@@ -368,13 +383,16 @@ display:
         if (changed && has_valid) {
           draw_row(cy, "VOC", "ppb", names, values, colors);
           for (int i = 0; i < 3; i++) prev_voc_vals[i] = values[i];
+          last_voc_update = now;
         }
         cy += 88;
       }
       if (draw_sgp4x) {
         int start_y = cy + 2;
+        // Smart SGP4x update - changed or stale data
         bool changed = (aqi_voc != prev_aqi_voc) || (aqi_nox != prev_aqi_nox);
-        if (changed) {
+        bool stale = (now - last_sgp4x_update) > STALE_THRESHOLD_MS;
+        if (changed || stale) {
           it.filled_rectangle(0, start_y, w, 40, Color::BLACK);
           auto sgp4x = "SGP41";
           if (isnan(aqi_nox)) { sgp4x = "SGP40"; }
@@ -393,6 +411,7 @@ display:
           }
           prev_aqi_voc = aqi_voc;
           prev_aqi_nox = aqi_nox;
+          last_sgp4x_update = now;
         }
       }
       // SELECT BEST AVAILABLE TEMPERATURE SENSOR
