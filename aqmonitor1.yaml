@@ -184,19 +184,27 @@ display:
     lambda: |-
       static bool initial = true;
       static float prev_particles[3] = {NAN, NAN, NAN};
+      static bool prev_particle_stale[3] = {false, false, false};
+      static uint32_t last_particle_update[3] = {0, 0, 0};
       static float prev_co2_vals[3] = {NAN, NAN, NAN};
+      static bool prev_co2_stale[3] = {false, false, false};
+      static uint32_t last_co2_update[3] = {0, 0, 0};
       static float prev_voc_vals[3] = {NAN, NAN, NAN};
+      static bool prev_voc_stale[3] = {false, false, false};
+      static uint32_t last_voc_update[3] = {0, 0, 0};
       static float prev_aqi_voc = NAN;
+      static bool prev_aqi_voc_stale = false;
+      static uint32_t last_aqi_voc_update = 0;
       static float prev_aqi_nox = NAN;
+      static bool prev_aqi_nox_stale = false;
+      static uint32_t last_aqi_nox_update = 0;
       static float prev_temp_f = NAN;
+      static bool prev_temp_stale = false;
       static float prev_hum = NAN;
-      static uint32_t last_particle_update = 0;
-      static uint32_t last_co2_update = 0;
-      static uint32_t last_voc_update = 0;
-      static uint32_t last_sgp4x_update = 0;
+      static bool prev_hum_stale = false;
       static uint32_t last_temp_update = 0;
       static uint32_t last_hum_update = 0;
-      static const uint32_t STALE_THRESHOLD_MS = 45000; // 45 seconds
+      static const uint32_t STALE_THRESHOLD_MS = 300000; // 5 minutes
       
       if (initial) {
         it.fill(Color::BLACK);
@@ -221,22 +229,36 @@ display:
       auto pm10 = id(pm10_pms).state;
       auto aqi_voc = id(aqi_voc_sgp41).state;
       auto aqi_nox = id(aqi_nox_sgp41).state;
-      // helper to draw a row of three values
+      // helper to draw a row of three values with partial updates
       auto draw_row = [&](int cy, const char *title, const char *unit,
                           const char *names[3], const float values[3],
-                          const Color colors[3], bool show_unit = true) {
-        it.filled_rectangle(0, cy, w, 88, Color::BLACK);
+                          const Color colors[3], float *prev_vals,
+                          bool *prev_stale, uint32_t *last_updates,
+                          bool show_unit = true) {
         it.line(0, cy, w, cy, id(white));
         it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
         if (show_unit) {
           it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
         }
-        int ix = 0;
         for (int i = 0; i < 3; i++) {
-          if (isnan(values[i])) continue;
-          it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
-          it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
-          ix++;
+          int cx = w/6*(1+i*2);
+          bool valid = !isnan(values[i]);
+          bool changed = valid ? values[i] != prev_vals[i] : !isnan(prev_vals[i]);
+          if (changed && valid) last_updates[i] = now;
+          bool stale = (now - last_updates[i]) > STALE_THRESHOLD_MS;
+          if (changed || (stale != prev_stale[i])) {
+            it.filled_rectangle(cx - 40, cy + 24, 80, 64, Color::BLACK);
+            if (valid) {
+              it.printf(cx, cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
+              if (stale) {
+                it.printf(cx, cy + 50, fv30, id(red), display::TextAlign::TOP_CENTER, "---");
+              } else {
+                it.printf(cx, cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
+              }
+            }
+            prev_vals[i] = valid ? values[i] : NAN;
+            prev_stale[i] = stale;
+          }
         }
       };
 
@@ -311,29 +333,17 @@ display:
       Color colors[3];
       // PREPARE PARTICLES
       cy = 40;
-      if (!isnan(pm1)){
-        names[0] = "PM1";
-        names[1] = "PM2.5";
-        names[2] = "PM10";
-        values[0] = pm1;
-        values[1] = pm25;
-        values[2] = pm10;
-        colors[0] = pm1_c;
-        colors[1] = pm25_c;
-        colors[2] = pm10_c;
-        // Smart particles update - changed or stale data
-        bool changed = false;
-        bool has_valid = false;
-        for (int i = 0; i < 3; i++) {
-          if (!isnan(values[i])) has_valid = true;
-          if (values[i] != prev_particles[i]) changed = true;
-        }
-        if (changed && has_valid) {
-          draw_row(cy, "Particles", "µg/m³", names, values, colors);
-          for (int i = 0; i < 3; i++) prev_particles[i] = values[i];
-          last_particle_update = now;
-        }
-      }
+      names[0] = "PM1";
+      names[1] = "PM2.5";
+      names[2] = "PM10";
+      values[0] = pm1;
+      values[1] = pm25;
+      values[2] = pm10;
+      colors[0] = pm1_c;
+      colors[1] = pm25_c;
+      colors[2] = pm10_c;
+      draw_row(cy, "Particles", "µg/m³", names, values, colors,
+               prev_particles, prev_particle_stale, last_particle_update);
       cy += 88;
       // PREPARE CO2
       if (!isnan(co2) || !isnan(e_co2) || !isnan(s_co2)){
@@ -346,18 +356,8 @@ display:
         colors[0] = co2_c;
         colors[1] = e_co2_c;
         colors[2] = s_co2_c;
-        // Smart CO2 update - changed or stale data
-        bool changed = false;
-        bool has_valid = false;
-        for (int i = 0; i < 3; i++) {
-          if (!isnan(values[i])) has_valid = true;
-          if (values[i] != prev_co2_vals[i]) changed = true;
-        }
-        if (changed && has_valid) {
-          draw_row(cy, "CO2", "ppm", names, values, colors);
-          for (int i = 0; i < 3; i++) prev_co2_vals[i] = values[i];
-          last_co2_update = now;
-        }
+        draw_row(cy, "CO2", "ppm", names, values, colors,
+                 prev_co2_vals, prev_co2_stale, last_co2_update);
         cy += 88;
       }
       // PREPARE VOC
@@ -373,45 +373,48 @@ display:
         colors[0] = s_voc_c;
         colors[1] = e_voc_c;
         colors[2] = ch2o_c;
-        // Smart VOC update - changed or stale data
-        bool changed = false;
-        bool has_valid = false;
-        for (int i = 0; i < 3; i++) {
-          if (!isnan(values[i])) has_valid = true;
-          if (values[i] != prev_voc_vals[i]) changed = true;
-        }
-        if (changed && has_valid) {
-          draw_row(cy, "VOC", "ppb", names, values, colors);
-          for (int i = 0; i < 3; i++) prev_voc_vals[i] = values[i];
-          last_voc_update = now;
-        }
+        draw_row(cy, "VOC", "ppb", names, values, colors,
+                 prev_voc_vals, prev_voc_stale, last_voc_update);
         cy += 88;
       }
       if (draw_sgp4x) {
+        auto sgp4x = isnan(aqi_nox) ? "SGP40" : "SGP41";
         int start_y = cy + 2;
-        // Smart SGP4x update - changed or stale data
-        bool changed = (aqi_voc != prev_aqi_voc) || (aqi_nox != prev_aqi_nox);
-        bool stale = (now - last_sgp4x_update) > STALE_THRESHOLD_MS;
-        if (changed || stale) {
-          it.filled_rectangle(0, start_y, w, 40, Color::BLACK);
-          auto sgp4x = "SGP41";
-          if (isnan(aqi_nox)) { sgp4x = "SGP40"; }
-          if(!isnan(aqi_voc)){
-            col = id(white);
+        // VOC index line
+        bool changed = !isnan(aqi_voc) ? (aqi_voc != prev_aqi_voc) : !isnan(prev_aqi_voc);
+        if (changed && !isnan(aqi_voc)) last_aqi_voc_update = now;
+        bool stale = (now - last_aqi_voc_update) > STALE_THRESHOLD_MS;
+        if (changed || (stale != prev_aqi_voc_stale)) {
+          it.filled_rectangle(0, start_y, w, 15, Color::BLACK);
+          if (!isnan(aqi_voc)) {
             it.printf(2, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "%s VOC Index", sgp4x);
             it.printf(180, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-            it.printf(180, start_y, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_voc);
-            start_y += 15;
-          }
-          if(!isnan(aqi_nox)){
-            col = id(white);
-            it.printf(2, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "%s NOx Index", sgp4x);
-            it.printf(180, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-            it.printf(180, start_y, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_nox);
+            if (stale) {
+              it.printf(180, start_y, fl14, id(red), TextAlign::CENTER_RIGHT, "---");
+            } else {
+              it.printf(180, start_y, fl14, id(white), TextAlign::CENTER_RIGHT, "%.0f ", aqi_voc);
+            }
           }
           prev_aqi_voc = aqi_voc;
+          prev_aqi_voc_stale = stale;
+        }
+        start_y += 15;
+        changed = !isnan(aqi_nox) ? (aqi_nox != prev_aqi_nox) : !isnan(prev_aqi_nox);
+        if (changed && !isnan(aqi_nox)) last_aqi_nox_update = now;
+        stale = (now - last_aqi_nox_update) > STALE_THRESHOLD_MS;
+        if (changed || (stale != prev_aqi_nox_stale)) {
+          it.filled_rectangle(0, start_y, w, 15, Color::BLACK);
+          if (!isnan(aqi_nox)) {
+            it.printf(2, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "%s NOx Index", sgp4x);
+            it.printf(180, start_y, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
+            if (stale) {
+              it.printf(180, start_y, fl14, id(red), TextAlign::CENTER_RIGHT, "---");
+            } else {
+              it.printf(180, start_y, fl14, id(white), TextAlign::CENTER_RIGHT, "%.0f ", aqi_nox);
+            }
+          }
           prev_aqi_nox = aqi_nox;
-          last_sgp4x_update = now;
+          prev_aqi_nox_stale = stale;
         }
       }
       // SELECT BEST AVAILABLE TEMPERATURE SENSOR
@@ -425,23 +428,39 @@ display:
       for(int i = 0; i < 4; i++){
         if(!isnan(hums[i])){hum = hums[i]; break;}
       }
-      // DRAW HUMITEMP ONLY IF CHANGED
+      // DRAW HUMITEMP WITH STALE INDICATOR
       if (!isnan(temp)) {
         float temp_f = temp * 1.8 + 32;
-        if (temp_f != prev_temp_f) {
+        bool changed = temp_f != prev_temp_f;
+        if (changed) last_temp_update = now;
+        bool stale = (now - last_temp_update) > STALE_THRESHOLD_MS;
+        if (changed || (stale != prev_temp_stale)) {
           it.filled_rectangle(60, 0, 80, 40, Color::BLACK);
           it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-          it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
+          if (stale) {
+            it.printf(90, 34, fv30, id(red), display::TextAlign::BOTTOM_RIGHT, "---");
+          } else {
+            it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp_f);
+          }
           prev_temp_f = temp_f;
+          prev_temp_stale = stale;
         }
       }
       if (!isnan(hum)) {
-        if (hum != prev_hum) {
+        bool changed = hum != prev_hum;
+        if (changed) last_hum_update = now;
+        bool stale = (now - last_hum_update) > STALE_THRESHOLD_MS;
+        if (changed || (stale != prev_hum_stale)) {
           it.filled_rectangle(150, 0, 90, 40, Color::BLACK);
           it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
           it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
-          it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
+          if (stale) {
+            it.printf(197, 34, fv30, id(red), display::TextAlign::BOTTOM_RIGHT, "---");
+          } else {
+            it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
+          }
           prev_hum = hum;
+          prev_hum_stale = stale;
         }
       }
     dimensions:
