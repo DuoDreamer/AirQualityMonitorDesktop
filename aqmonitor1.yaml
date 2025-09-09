@@ -167,274 +167,298 @@ color:
     hex: 202080
 
 display:
-  - platform: ili9xxx    
+  - platform: ili9xxx
     model: ILI9341
     cs_pin: GPIO03
     dc_pin: GPIO04
     reset_pin: GPIO06
-    #data_rate: 10MHz
     transform:
-      #mirror_x: true
       mirror_y: true
-    #show_test_card: true
-    color_order: bgr # CHANGE THIS if your screen has colors mapped wrong
+    color_order: bgr
     color_palette: 8BIT
     invert_colors: false
+    update_interval: 5s               # keep the same
     lambda: |-
-      it.fill(Color::BLACK);
-      // Please forgive me. I know this is horrible spaghetti code, but for now it gets the job done. Will eventually move all this to LVGL. 
-      ;
-      auto cy = 0; // current Y position
-      auto ix = 0; // current X grid position
-      auto fv30 = id(font_value_30);
-      auto fh36 = id(font_heading_36);
-      auto fl14 = id(font_label_14);
-      ;
-      auto w = it.get_width();
-      auto h = it.get_height();
-      ;
-      auto col = id(white);
-      ;
-      auto co2 = id(co2_scd40).state;
-      auto e_co2 = id(eco2_ens160).state;
-      auto s_co2 = id(eco2_sgp30).state;
-      auto ch2o = id(ch2o_ze08).state;
-      auto e_voc = id(tvoc_ens160).state;
-      auto s_voc = id(tvoc_sgp30).state;
-      auto pm1 = id(pm1_pms).state;
-      auto pm25 = id(pm25_pms).state;
-      auto pm10 = id(pm10_pms).state;
-      auto aqi_voc = id(aqi_voc_sgp41).state;
-      auto aqi_nox = id(aqi_nox_sgp41).state;
-      ;
-      ;
-      ;
-      // SET COLOR FOR EACH READING
-      ;
-      col = id(green);
-      if (co2 > 700){col = id(yellow);}
-      if (co2 > 1000){col = id(orange);}
-      if (co2 > 1200){col = id(red);}
-      if (co2 > 1500){col = id(purple);}
-      auto co2_c = col;
-      ;
-      col = id(green);
-      if (e_co2 > 700){col = id(yellow);}
-      if (e_co2 > 1000){col = id(orange);}
-      if (e_co2 > 1200){col = id(red);}
-      if (e_co2 > 1500){col = id(purple);}
-      auto e_co2_c = col;
-      ;
-      col = id(green);
-      if (s_co2 > 700){col = id(yellow);}
-      if (s_co2 > 1000){col = id(orange);}
-      if (s_co2 > 1200){col = id(red);}
-      if (s_co2 > 1500){col = id(purple);}
-      auto s_co2_c = col;
-      ;
-      col = id(green);
-      if (ch2o > 60){col = id(yellow);}
-      if (ch2o > 100){col = id(orange);}
-      if (ch2o > 150){col = id(red);}
-      if (ch2o > 200){col = id(purple);}
-      auto ch2o_c = col;
-      ;
-      col = id(green);
-      if (e_voc > 400){col = id(yellow);}
-      if (e_voc > 800){col = id(orange);}
-      if (e_voc > 1400){col = id(red);}
-      if (e_voc > 2000){col = id(purple);}
-      auto e_voc_c = col;
-      ;
-      col = id(green);
-      if (s_voc > 300){col = id(yellow);}
-      if (s_voc > 600){col = id(orange);}
-      if (s_voc > 1000){col = id(red);}
-      if (s_voc > 1500){col = id(purple);}
-      auto s_voc_c = col;
-      ;
-      col = id(green);
-      if (pm1 > 5){col = id(yellow);}
-      if (pm1 > 10){col = id(orange);}
-      if (pm1 > 15){col = id(red);}
-      if (pm1 > 25){col = id(purple);}
-      auto pm1_c = col;
-      ;
-      col = id(green);
-      if (pm25 > 5){col = id(yellow);}
-      if (pm25 > 10){col = id(orange);}
-      if (pm25 > 15){col = id(red);}
-      if (pm25 > 25){col = id(purple);}
-      auto pm25_c = col;
-      ;
-      col = id(green);
-      if (pm10 > 15){col = id(yellow);}
-      if (pm10 > 45){col = id(orange);}
-      if (pm10 > 60){col = id(red);}
-      if (pm10 > 80){col = id(purple);}
-      auto pm10_c = col;
-      ;
-      ;
-      // SELECT BEST AVAILABLE TEMPERATURE SENSOR
-      float temps[5] = {id(temp_sht40).state, id(temp_aht20).state, id(temp_scd40).state, id(temp_aht20_ens).state, id(temp_bmp280).state};
-      float hums[4] = {id(hum_sht40).state, id(hum_aht20).state, id(hum_scd40).state, id(hum_aht20_ens).state};
-      float temp = 0;
-      float hum = 0;
-      for(int i = 0; i < 5; i++){
-      if(!isnan(temps[i])){temp = temps[i]; break;}
+      /* --------------------------------------------------------------
+         CONSTANTS – heights of each visual lane (in pixels)
+       ----------------------------------------------------------------*/
+      const uint16_t H_TEMP_HUM   = 40;   // two tiny boxes at the top
+      const uint16_t H_ROW        = 88;   // particles, CO₂ and VOC rows
+      const uint16_t H_SGP41_IDX  = 40;   // SGP41 index row
+
+      static bool first_run = true;
+      if (first_run) {
+        it.fill(Color::BLACK);          // clear once on boot
+        first_run = false;
       }
-      for(int i = 0; i < 4; i++){
-      if(!isnan(hums[i])){hum = hums[i]; break;}
+
+      /* --------------------------------------------------------------
+         Short‑hand aliases – makes the lambda easier to read
+       ----------------------------------------------------------------*/
+      auto fv30  = id(font_value_30);
+      auto fh36  = id(font_heading_36);
+      auto fl14  = id(font_label_14);
+      const uint16_t w = it.get_width();
+
+      /* --------------------------------------------------------------
+         Grab sensor states (the `id(...).state` calls are cheap)
+       ----------------------------------------------------------------*/
+      const float co2   = id(co2_scd40).state;
+      const float e_co2 = id(eco2_ens160).state;
+      const float s_co2 = id(eco2_sgp30).state;
+
+      const float ch2o  = id(ch2o_ze08).state;
+      const float e_voc = id(tvoc_ens160).state;
+      const float s_voc = id(tvoc_sgp30).state;
+
+      const float pm1   = id(pm1_pms).state;
+      const float pm25  = id(pm25_pms).state;
+      const float pm10  = id(pm10_pms).state;
+
+      const float aqi_voc = id(aqi_voc_sgp41).state;
+      const float aqi_nox = id(aqi_nox_sgp41).state;
+
+      /* --------------------------------------------------------------
+         Helper: colour‑coding based on thresholds (unchanged from yours)
+       ----------------------------------------------------------------*/
+      auto get_color = [&](float v, const Color &green,
+                           const Color &yellow, const Color &orange,
+                           const Color &red, const Color &purple) -> Color {
+        if (std::isnan(v)) return green;               // fallback
+        if (v > 1500) return purple;
+        if (v > 1200) return red;
+        if (v > 1000) return orange;
+        if (v > 700)  return yellow;
+        return green;
+      };
+
+      const Color col_co2   = get_color(co2,   id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_e_co2 = get_color(e_co2, id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_s_co2 = get_color(s_co2, id(green), id(yellow), id(orange), id(red), id(purple));
+
+      const Color col_ch2o  = get_color(ch2o,  id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_e_voc = get_color(e_voc, id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_s_voc = get_color(s_voc, id(green), id(yellow), id(orange), id(red), id(purple));
+
+      const Color col_pm1   = get_color(pm1,   id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_pm25  = get_color(pm25,  id(green), id(yellow), id(orange), id(red), id(purple));
+      const Color col_pm10  = get_color(pm10,  id(green), id(yellow), id(orange), id(red), id(purple));
+
+      /* --------------------------------------------------------------
+         Temperature & Humidity – **always** drawn at the very top.
+         They occupy a fixed 40‑pixel high lane (0 … H_TEMP_HUM).
+       ----------------------------------------------------------------*/
+      // ---- temperature ------------------------------------------------
+      static float prev_temp_f = NAN;
+      static uint32_t last_temp_update = 0;
+      if (!std::isnan(id(temp_sht40).state) ||
+          !std::isnan(id(temp_aht20_c).state) ||
+          !std::isnan(id(temp_scd40).state) ||
+          !std::isnan(id(temp_aht20_ens).state) ||
+          !std::isnan(id(temp_bmp280).state)) {
+
+        // pick the first non‑NaN temperature (your original order)
+        const float temps[5] = {
+          id(temp_sht40).state, id(temp_aht20_c).state,
+          id(temp_scd40).state, id(temp_aht20_ens).state,
+          id(temp_bmp280).state };
+        float temp_c = NAN;
+        for (auto t : temps) if (!std::isnan(t)) { temp_c = t; break; }
+
+        if (!std::isnan(temp_c)) {
+          const float temp_f = temp_c * 1.8f + 32.f;
+          bool changed = std::fabs(temp_f - prev_temp_f) > 0.01f;   // tiny tolerance
+          bool stale   = (millis() - last_temp_update) > 45000UL;
+
+          if (changed || stale) {
+            it.filled_rectangle(60, 0, 80, H_TEMP_HUM, Color::BLACK);
+            it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
+            it.printf(90, 34, fv30, id(white), TextAlign::BOTTOM_RIGHT,
+                      "%.1f", temp_f);
+            prev_temp_f = temp_f;
+            last_temp_update = millis();
+          }
+        }
       }
-      ;
-      // DRAW HUMITEMP
-      it.printf(90, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "°F");
-      it.printf(90, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", temp);
-      it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
-      it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "\%");
-      it.printf(197, 34, fv30, white, display::TextAlign::BOTTOM_RIGHT, "%.1f", hum);
-      ;
-      ;
-      // PREPARE VARIABLES
-      auto title = "";
-      auto unit = "";
-      const char *names[3];
-      float values[3];
-      esphome::Color colors[3];
-      int count = 0;
-      ;
-      ;
-      // PREPARE PARTICLES
-      cy = 30;
-      ;
-      if (!isnan(pm1)){
-      count = 0;
-      title = "Particles";
-      unit = "µg/m³";
-      names[0] = "PM1";
-      names[1] = "PM2.5";
-      names[2] = "PM10"; //god C++ sucks
-      values[0] = pm1;
-      values[1] = pm25;
-      values[2] = pm10;
-      colors[0] = pm1_c;
-      colors[1] = pm25_c;
-      colors[2] = pm10_c;
-      ;
-      ;
-      // START REUSABLE
-      it.line(0,cy,w,cy,id(white));
-      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
-      it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
-      ix = 0;
-      for (int i = 0; i < 3; i++){
-      if(isnan(values[i])){continue;}
-      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
-      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
-      ix++;
+
+      // ---- humidity ---------------------------------------------------
+      static float prev_hum = NAN;
+      static uint32_t last_hum_update = 0;
+      if (!std::isnan(id(hum_sht40).state) ||
+          !std::isnan(id(hum_aht20).state) ||
+          !std::isnan(id(hum_scd40).state) ||
+          !std::isnan(id(hum_aht20_ens).state)) {
+
+        const float hums[4] = {
+          id(hum_sht40).state, id(hum_aht20).state,
+          id(hum_scd40).state, id(hum_aht20_ents).state };
+        float hum = NAN;
+        for (auto h : hums) if (!std::isnan(h)) { hum = h; break; }
+
+        if (!std::isnan(hum)) {
+          bool changed = std::fabs(hum - prev_hum) > 0.01f;
+          bool stale   = (millis() - last_hum_update) > 45000UL;
+
+          if (changed || stale) {
+            it.filled_rectangle(150, 0, 90, H_TEMP_HUM, Color::BLACK);
+            it.printf(197, 18, fl14, id(grey), TextAlign::BOTTOM_LEFT, "RH");
+            it.print(197, 30, fl14, id(grey), TextAlign::BOTTOM_LEFT, "%");
+            it.printf(197, 34, fv30, id(white), TextAlign::BOTTOM_RIGHT,
+                      "%.1f", hum);
+            prev_hum = hum;
+            last_hum_update = millis();
+          }
+        }
       }
-      // END REUSABLE
-      ;
-      cy += 88;
+
+      /* --------------------------------------------------------------
+         Helper: draw a three‑column row (particles, CO₂, VOC)
+         The function only erases **its own lane** – never touches the
+         temperature/humidity area above.
+       ----------------------------------------------------------------*/
+      auto draw_row = [&](int y, const char *title, const char *unit,
+                          const char *names[3], const float values[3],
+                          const Color colors[3]) {
+        // erase only this row (height = H_ROW)
+        it.filled_rectangle(0, y, w, H_ROW, Color::BLACK);
+        // separator line at the top of the row
+        it.line(0, y, w, y, id(white));
+
+        // title & unit
+        it.print(2, y + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
+        it.print(w - 2, y + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
+
+        // three columns – only draw the ones that are not NaN
+        int col_idx = 0;
+        for (int i = 0; i < 3; ++i) {
+          if (std::isnan(values[i])) continue;
+          float v = values[i];
+          const char *n = names[i];
+          Color c = colors[i];
+
+          // X position: centre of each column (1/6, 3/6, 5/6 of width)
+          int x_center = w / 6 * (1 + col_idx * 2);
+          it.printf(x_center, y + 58, fl14, id(grey),
+                    TextAlign::BOTTOM_CENTER, "%s", n);
+          it.printf(x_center, y + 50, fv30, c,
+                    TextAlign::TOP_CENTER, "%.0f", v);
+          ++col_idx;
+        }
+      };
+
+      /* --------------------------------------------------------------
+         Now draw the remaining blocks – each one checks “changed or stale”
+         and erases only its own rectangle.
+       ----------------------------------------------------------------*/
+      uint32_t now = millis();
+
+      // ---- Particles -------------------------------------------------
+      static float prev_pm[3] = {NAN, NAN, NAN};
+      static uint32_t last_pm_update = 0;
+      if (!std::isnan(pm1) || !std::isnan(pm25) || !std::isnan(pm10)) {
+        const char *names[3] = {"PM1", "PM2.5", "PM10"};
+        float vals[3]   = {pm1, pm25, pm10};
+        Color cols[3]   = {col_pm1, col_pm25, col_pm10};
+
+        bool changed = false;
+        for (int i = 0; i < 3; ++i)
+          if (!std::isnan(vals[i]) && vals[i] != prev_pm[i]) changed = true;
+
+        bool stale = (now - last_pm_update) > 45000UL;
+        if (changed || stale) {
+          draw_row(H_TEMP_HUM, "Particles", "µg/m³",
+                   names, vals, cols);
+          for (int i = 0; i < 3; ++i) prev_pm[i] = vals[i];
+          last_pm_update = now;
+        }
       }
-      ;
-      // END PARTICLES
-      ;
-      // PREPARE CO2
-      ;
-      if (!isnan(co2) or !isnan(e_co2) or !isnan(s_co2)){
-      count = 0;
-      title = "CO2";
-      unit = "ppm";
-      names[0] = "SCD40";
-      names[1] = "ENS160 est.";
-      names[2] = "SGP30 est.";
-      values[0] = co2;
-      values[1] = e_co2;
-      values[2] = s_co2;
-      colors[0] = co2_c;
-      colors[1] = e_co2_c;
-      colors[2] = s_co2_c;
-      ;
-      ;
-      // START REUSABLE
-      it.line(0,cy,w,cy,id(white));
-      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
-      it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);
-      ix = 0;
-      for (int i = 0; i < 3; i++){
-      if(isnan(values[i])){continue;}
-      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
-      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
-      ix++;
+
+      // ---- CO₂ -------------------------------------------------------
+      static float prev_co2[3] = {NAN, NAN, NAN};
+      static uint32_t last_co2_update = 0;
+      if (!std::isnan(co2) || !std::isnan(e_co2) || !std::isnan(s_co2)) {
+        const char *names[3] = {"SCD40", "ENS160 est.", "SGP30 est."};
+        float vals[3]   = {co2, e_co2, s_co2};
+        Color cols[3]   = {col_co2, col_e_co2, col_s_co2};
+
+        bool changed = false;
+        for (int i = 0; i < 3; ++i)
+          if (!std::isnan(vals[i]) && vals[i] != prev_co2[i]) changed = true;
+
+        bool stale = (now - last_co2_update) > 45000UL;
+        if (changed || stale) {
+          draw_row(H_TEMP_HUM + H_ROW, "CO₂", "ppm",
+                   names, vals, cols);
+          for (int i = 0; i < 3; ++i) prev_co2[i] = vals[i];
+          last_co2_update = now;
+        }
       }
-      // END REUSABLE
-      ;
-      ;
-      cy += 88;
+
+      // ---- VOC -------------------------------------------------------
+      static float prev_voc[3] = {NAN, NAN, NAN};
+      static uint32_t last_voc_update = 0;
+      if (!std::isnan(ch2o) || !std::isnan(e_voc) || !std::isnan(s_voc)) {
+        const char *names[3] = {"SGP30", "ENS160", "ZE08‑CH₂O"};
+        float vals[3]   = {s_voc, e_voc, ch2o};
+        Color cols[3]   = {col_s_voc, col_e_voc, col_ch2o};
+
+        bool changed = false;
+        for (int i = 0; i < 3; ++i)
+          if (!std::isnan(vals[i]) && vals[i] != prev_voc[i]) changed = true;
+
+        bool stale = (now - last_voc_update) > 45000UL;
+        if (changed || stale) {
+          draw_row(H_TEMP_HUM + 2*H_ROW, "VOC", "ppb",
+                   names, vals, cols);
+          for (int i = 0; i < 3; ++i) prev_voc[i] = vals[i];
+          last_voc_update = now;
+        }
       }
-      ;
-      // END CO2
-      ;
-      // PREPARE VOC
-      ;
-      bool draw_general_voc = (!isnan(ch2o) or !isnan(e_voc) or !isnan(s_voc));
-      bool draw_sgp4x = (!isnan(aqi_voc) or !isnan(aqi_nox));
-      if (draw_general_voc or draw_sgp4x){
-      count = 0;
-      title = "VOC";
-      unit = "ppb";
-      names[0] = "SGP30";
-      names[1] = "ENS160";
-      names[2] = "ZE08-CH2O";
-      values[0] = s_voc;
-      values[1] = e_voc;
-      values[2] = ch2o;
-      colors[0] = s_voc_c;
-      colors[1] = e_voc_c;
-      colors[2] = ch2o_c;
-      ;
-      ;
-      // START REUSABLE | UNIT CONDITION ADDED
-      it.line(0,cy,w,cy,id(white));
-      it.print(2, cy + 22, fh36, id(blue), TextAlign::CENTER_LEFT, title);
-      if (draw_general_voc){it.print(w-2, cy + 31, fl14, id(grey), TextAlign::CENTER_RIGHT, unit);}
-      ix = 0;
-      for (int i = 0; i < 3; i++){
-      if(isnan(values[i])){continue;}
-      it.printf(w/6*(1+ix*2), cy + 58, fl14, id(grey), TextAlign::BOTTOM_CENTER, "%s", names[i]);
-      it.printf(w/6*(1+ix*2), cy + 50, fv30, colors[i], display::TextAlign::TOP_CENTER, "%.0f", values[i]);
-      ix++;
+
+      // ---- SGP41 VOC / NOx indices ----------------------------------
+      static float prev_aqi_voc = NAN;
+      static float prev_aqi_nox = NAN;
+      static uint32_t last_sgp41_update = 0;
+      if (!std::isnan(aqi_voc) || !std::isnan(aqi_nox)) {
+        bool changed = (aqi_voc != prev_aqi_voc) ||
+                       (aqi_nox != prev_aqi_nox);
+        bool stale   = (now - last_sgp41_update) > 45000UL;
+
+        if (changed || stale) {
+          // erase only the SGP41 lane
+          it.filled_rectangle(0,
+                               H_TEMP_HUM + 3*H_ROW,
+                               w, H_SGP41_IDX,
+                               Color::BLACK);
+
+          const char *sgp = std::isnan(aqi_nox) ? "SGP40" : "SGP41";
+
+          int y = H_TEMP_HUM + 3*H_ROW + 2;   // a little top margin
+
+          if (!std::isnan(aqi_voc)) {
+            it.printf(2, y, fl14, id(grey), TextAlign::CENTER_LEFT,
+                      "%s VOC Index", sgp);
+            it.printf(w-2, y, fl14, id(grey), TextAlign::CENTER_RIGHT,
+                      "(1 … 500)");
+            it.printf(w-2, y+12, fl14, id(white), TextAlign::CENTER_RIGHT,
+                      "%.0f ", aqi_voc);
+            y += 15;
+          }
+          if (!std::isnan(aqi_nox)) {
+            it.printf(2, y, fl14, id(grey), TextAlign::CENTER_LEFT,
+                      "%s NOx Index", sgp);
+            it.printf(w-2, y, fl14, id(grey), TextAlign::CENTER_RIGHT,
+                      "(1 … 500)");
+            it.printf(w-2, y+12, fl14, id(white), TextAlign::CENTER_RIGHT,
+                      "%.0f ", aqi_nox);
+          }
+
+          prev_aqi_voc = aqi_voc;
+          prev_aqi_nox = aqi_nox;
+          last_sgp41_update = now;
+        }
       }
-      // END REUSABLE
-      ;
-      ;
-      if (draw_general_voc){cy += 88;}
-      else {cy += 46;}
-      }
-      // START SGP4x
-      cy+=2;
-      auto sgp4x = "SGP41";
-      if (isnan(aqi_nox)){sgp4x = "SGP40";}
-      if(!isnan(aqi_voc)){
-      col = id(white);
-      it.printf(2, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "%s VOC Index", sgp4x);
-      it.printf(180, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-      it.printf(180, cy, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_voc);
-      cy+=15;
-      }
-      ;
-      if(!isnan(aqi_nox)){
-      col = id(white);
-      it.printf(2, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "%s NOx Index", sgp4x);
-      it.printf(180, cy, fl14, id(grey), TextAlign::CENTER_LEFT, "(1 ... 500)");
-      it.printf(180, cy, fl14, col, TextAlign::CENTER_RIGHT, "%.0f ", aqi_nox);
-      }
-      ;
-      // END VOC & SGP4x
-      ;
-      ;
-      ;
+
     dimensions:
       height: 320
       width: 240
